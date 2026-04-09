@@ -27,8 +27,8 @@ The crawler stores data in PostgreSQL and exposes it via a local web dashboard:
    npm install
    npm run build
 
-   # Crawl up to 1,000 repositories (runs fast and saves to local JSON)
-   npm run start 1000
+   # Crawl up to 100,000 repositories (runs fast and saves to local JSON)
+   npm run start 100000
    ```
 
 ## Cloud (GitHub Actions)
