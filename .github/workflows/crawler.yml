@@ -1,0 +1,75 @@
+name: GitHub Crawler Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *' # Run daily
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: crawler
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: github_data
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build TypeScript
+        run: npx tsc
+
+      - name: setup-postgres
+        env:
+          PGPASSWORD: password
+        run: |
+          psql -h localhost -U crawler -d github_data -c "
+            CREATE TABLE IF NOT EXISTS github_repositories (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                owner TEXT NOT NULL,
+                stars INTEGER NOT NULL,
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );"
+
+      - name: crawl-stars
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DATABASE_URL: postgres://crawler:password@localhost:5432/github_data
+        run: node dist/src/index.js 100000
+
+      - name: Dump Database
+        env:
+          PGPASSWORD: password
+        run: |
+          pg_dump -U crawler -h localhost -d github_data -t github_repositories --inserts > database_dump.sql
+          
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: github-crawler-db-dump
+          path: database_dump.sql
